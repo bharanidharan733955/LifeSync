@@ -175,7 +175,7 @@ if (staticDistPath) {
   app.use(express.static(staticDistPath));
 
   // SPA fallback for HTML5 client-side navigation
-  app.get('*', (req, res, next) => {
+  app.get('{*path}', (req, res, next) => {
     if (
       req.path.startsWith('/api') ||
       req.path.startsWith('/health') ||
