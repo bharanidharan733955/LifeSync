@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
 
 // ─── FinanceCategory model ────────────────────────────────────────────────────
-// Categories for transactions. System categories are shared; user categories
-// are private (user field set). IDOR protected – queries always filter by userId.
+// Categories for transactions. System categories are shared (user: null, isSystem: true);
+// user categories are private (user: ObjectId, isSystem: false).
+// Protected: users cannot edit or delete system categories.
 
 const financeCategorySchema = new mongoose.Schema(
   {
@@ -10,6 +11,7 @@ const financeCategorySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null, // null = system/global category
+      index: true,
     },
     name: {
       type: String,
@@ -19,7 +21,11 @@ const financeCategorySchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: { values: ['income', 'expense', 'both'], message: 'Type must be income, expense, or both' },
+      enum: {
+        values: ['INCOME', 'EXPENSE', 'BOTH', 'income', 'expense', 'both'],
+        message: 'Type must be INCOME, EXPENSE, or BOTH',
+      },
+      set: (v) => (v ? v.toUpperCase() : v),
       required: [true, 'Category type is required'],
     },
     icon: {
@@ -35,15 +41,11 @@ const financeCategorySchema = new mongoose.Schema(
     isSystem: {
       type: Boolean,
       default: false,
+      index: true,
     },
     isActive: {
       type: Boolean,
       default: true,
-    },
-    parentCategory: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'FinanceCategory',
-      default: null,
     },
     description: {
       type: String,
@@ -51,19 +53,22 @@ const financeCategorySchema = new mongoose.Schema(
       maxlength: 200,
       default: null,
     },
-    sortOrder: {
-      type: Number,
-      default: 0,
-    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform(doc, ret) {
+        delete ret.__v;
+        return ret;
+      },
+    },
+  }
 );
 
-// Indexes
-financeCategorySchema.index({ user: 1, type: 1 });
-financeCategorySchema.index({ isSystem: 1, type: 1 });
-financeCategorySchema.index({ user: 1, isActive: 1 });
-// Unique name per user (or per system for system categories)
+// Compound indexes
+financeCategorySchema.index({ user: 1, type: 1, isActive: 1 });
+financeCategorySchema.index({ isSystem: 1, type: 1, isActive: 1 });
 financeCategorySchema.index(
   { user: 1, name: 1, type: 1 },
   { unique: true, partialFilterExpression: { user: { $ne: null } } }
@@ -71,4 +76,3 @@ financeCategorySchema.index(
 
 const FinanceCategory = mongoose.model('FinanceCategory', financeCategorySchema);
 export default FinanceCategory;
-

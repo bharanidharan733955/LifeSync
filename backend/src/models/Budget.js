@@ -1,80 +1,160 @@
 import mongoose from 'mongoose';
 
 // ─── Budget model ─────────────────────────────────────────────────────────────
+// Supports both CATEGORY and OVERALL budgets with WEEKLY, MONTHLY, or CUSTOM periods.
+// All amounts stored as Decimal128 for financial precision.
+// Strict user ownership enforced – all queries filter by req.userId.
 
 const budgetSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: [true, 'User is required'],
+      index: true,
     },
     name: {
       type: String,
       required: [true, 'Budget name is required'],
       trim: true,
-      maxlength: 100,
+      maxlength: [100, 'Budget name cannot exceed 100 characters'],
+    },
+    budgetType: {
+      type: String,
+      enum: {
+        values: ['CATEGORY', 'OVERALL'],
+        message: 'Budget type must be CATEGORY or OVERALL',
+      },
+      set: (v) => (v ? v.toUpperCase() : v),
+      required: [true, 'Budget type is required'],
+      index: true,
+    },
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FinanceCategory',
+      default: null,
+      index: true,
+      validate: {
+        validator(v) {
+          // If budgetType is CATEGORY, category must be provided
+          if (this.budgetType === 'CATEGORY' && !v) {
+            return false;
+          }
+          return true;
+        },
+        message: 'Category is required for CATEGORY budget type',
+      },
+    },
+    amount: {
+      type: mongoose.Schema.Types.Decimal128,
+      required: [true, 'Budget amount is required'],
+      validate: {
+        validator(v) {
+          if (v == null) return false;
+          const val = parseFloat(v.toString());
+          return !isNaN(val) && val > 0;
+        },
+        message: 'Budget amount must be greater than 0',
+      },
+    },
+    currency: {
+      type: String,
+      default: 'INR',
+      uppercase: true,
+      maxlength: 3,
     },
     period: {
       type: String,
-      enum: { values: ['weekly', 'monthly', 'yearly'], message: 'Period must be weekly, monthly, or yearly' },
-      required: true,
+      enum: {
+        values: ['WEEKLY', 'MONTHLY', 'CUSTOM'],
+        message: 'Period must be WEEKLY, MONTHLY, or CUSTOM',
+      },
+      set: (v) => (v ? v.toUpperCase() : v),
+      required: [true, 'Period is required'],
     },
-    periodStartDate: {
+    startDate: {
       type: Date,
-      required: true,
+      required: [true, 'Start date is required'],
+      index: true,
     },
-    periodEndDate: {
+    endDate: {
       type: Date,
-      required: true,
-    },
-    totalBudget: {
-      type: mongoose.Schema.Types.Decimal128,
-      required: true,
+      required: [true, 'End date is required'],
+      index: true,
       validate: {
-        validator(v) { return parseFloat(v.toString()) > 0; },
-        message: 'Total budget must be greater than 0',
+        validator(v) {
+          if (!this.startDate || !v) return true;
+          return this.startDate < v;
+        },
+        message: 'Start date must be before end date',
       },
     },
-    currency: { type: String, default: 'INR', uppercase: true, maxlength: 3 },
-    // Category-specific limits within this budget
-    categoryLimits: [
-      {
-        category: { type: mongoose.Schema.Types.ObjectId, ref: 'FinanceCategory' },
-        limit: { type: mongoose.Schema.Types.Decimal128, required: true },
-        alertThreshold: {
-          type: Number,
-          min: 1,
-          max: 100,
-          default: 80,
-          // Percentage of limit at which to send alert
-        },
-      },
-    ],
-    isActive: { type: Boolean, default: true },
-    alertsEnabled: { type: Boolean, default: true },
-    notes: { type: String, trim: true, maxlength: 500, default: null },
+    alertThreshold: {
+      type: Number,
+      min: [1, 'Alert threshold must be at least 1%'],
+      max: [100, 'Alert threshold cannot exceed 100%'],
+      default: 80,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Notes cannot exceed 500 characters'],
+      default: null,
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
-budgetSchema.index({ user: 1, period: 1, periodStartDate: -1 });
+// ─── Indexes ──────────────────────────────────────────────────────────────────
 budgetSchema.index({ user: 1, isActive: 1 });
-budgetSchema.index({ user: 1, periodStartDate: 1, periodEndDate: 1 });
+budgetSchema.index({ user: 1, budgetType: 1 });
+budgetSchema.index({ user: 1, category: 1, startDate: 1, endDate: 1 });
+budgetSchema.index({ user: 1, period: 1, startDate: -1 });
 
+// ─── Aliases for compatibility ───────────────────────────────────────────────
+budgetSchema.virtual('totalBudget')
+  .get(function () {
+    return this.amount != null ? parseFloat(this.amount.toString()) : 0;
+  })
+  .set(function (val) {
+    this.amount = val;
+  });
+
+budgetSchema.virtual('periodStartDate')
+  .get(function () {
+    return this.startDate;
+  })
+  .set(function (val) {
+    this.startDate = val;
+  });
+
+budgetSchema.virtual('periodEndDate')
+  .get(function () {
+    return this.endDate;
+  })
+  .set(function (val) {
+    this.endDate = val;
+  });
+
+// ─── toJSON transform ─────────────────────────────────────────────────────────
 budgetSchema.set('toJSON', {
+  virtuals: true,
   transform(doc, ret) {
-    if (ret.totalBudget instanceof mongoose.Types.Decimal128) {
-      ret.totalBudget = parseFloat(ret.totalBudget.toString());
+    if (ret.amount != null) {
+      ret.amount = parseFloat(ret.amount.toString());
     }
-    if (Array.isArray(ret.categoryLimits)) {
-      ret.categoryLimits = ret.categoryLimits.map((cl) => ({
-        ...cl,
-        limit: cl.limit instanceof mongoose.Types.Decimal128
-          ? parseFloat(cl.limit.toString())
-          : cl.limit,
-      }));
-    }
+    ret.totalBudget = ret.amount;
+    ret.periodStartDate = ret.startDate;
+    ret.periodEndDate = ret.endDate;
     delete ret.__v;
     return ret;
   },
@@ -82,4 +162,3 @@ budgetSchema.set('toJSON', {
 
 const Budget = mongoose.model('Budget', budgetSchema);
 export default Budget;
-

@@ -1,26 +1,72 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { sendSuccess } from '../utils/apiResponse.js';
+import { validate } from '../middleware/validate.js';
+import { createCategorySchema, updateCategorySchema } from '../validators/schemas.js';
+import * as categoryController from '../controllers/categoryController.js';
 
 const router = Router();
+
+// All category routes require authentication
 router.use(authenticate);
 
-router.get('/', asyncHandler(async (req, res) => {
-  sendSuccess(res, { message: 'Categories endpoint ready. Implementation in Phase 3.', data: [] });
-}));
+/**
+ * @swagger
+ * /categories:
+ *   get:
+ *     tags: [Finance - Categories]
+ *     summary: Get all available categories (system + user custom)
+ */
+router.get('/', asyncHandler(categoryController.getCategories));
 
-router.post('/', asyncHandler(async (req, res) => {
-  sendSuccess(res, { message: 'Create category endpoint ready. Implementation in Phase 3.' });
-}));
+/**
+ * @swagger
+ * /categories/{id}:
+ *   get:
+ *     tags: [Finance - Categories]
+ *     summary: Get category by ID
+ */
+router.get('/:id', asyncHandler(categoryController.getCategoryById));
 
-router.patch('/:id', asyncHandler(async (req, res) => {
-  sendSuccess(res, { message: 'Update category endpoint ready.' });
-}));
+/**
+ * @swagger
+ * /categories:
+ *   post:
+ *     tags: [Finance - Categories]
+ *     summary: Create custom user category
+ */
+router.post(
+  '/',
+  validate(createCategorySchema),
+  asyncHandler(categoryController.createCategory)
+);
 
-router.delete('/:id', asyncHandler(async (req, res) => {
-  sendSuccess(res, { message: 'Delete category endpoint ready.' });
-}));
+/**
+ * @swagger
+ * /categories/{id}:
+ *   put:
+ *     tags: [Finance - Categories]
+ *     summary: Update custom user category
+ */
+router.put(
+  '/:id',
+  validate(updateCategorySchema),
+  asyncHandler(categoryController.updateCategory)
+);
+
+router.patch(
+  '/:id',
+  validate(updateCategorySchema),
+  asyncHandler(categoryController.updateCategory)
+);
+
+/**
+ * @swagger
+ * /categories/{id}:
+ *   delete:
+ *     tags: [Finance - Categories]
+ *     summary: Delete custom user category
+ */
+router.delete('/:id', asyncHandler(categoryController.deleteCategory));
 
 export default router;
-

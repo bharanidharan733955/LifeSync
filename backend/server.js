@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { env } from './src/config/env.js';
 import { connectDB } from './src/config/database.js';
+import { startRecurringJob, stopRecurringJob } from './src/jobs/recurringJob.js';
 import app from './src/app.js';
 
 // ─── Server entry point ───────────────────────────────────────────────────────
@@ -24,11 +25,15 @@ const startServer = async () => {
 ║  Health      : http://localhost:${env.PORT}/health${' '.repeat(Math.max(0, 25 - String(env.PORT).length))}║
 ╚═══════════════════════════════════════════════════════════╝
       `);
+
+      // 3. Start recurring transaction processor cron
+      startRecurringJob();
     });
 
     // ── Graceful shutdown ─────────────────────────────────────────────────
     const gracefulShutdown = (signal) => {
       console.log(`\n[Server] ${signal} received. Shutting down gracefully...`);
+      stopRecurringJob();
       server.close(() => {
         console.log('[Server] HTTP server closed');
         process.exit(0);

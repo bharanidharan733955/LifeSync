@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 // ─── RefreshToken model ──────────────────────────────────────────────────────
-// Stores hashed refresh tokens for token rotation and revocation.
-// One document per device/session. Tokens are rotated on each refresh.
+// Stores hashed refresh tokens for session rotation, revocation, and reuse detection.
+// Raw tokens are NEVER stored in the database.
 
 const refreshTokenSchema = new mongoose.Schema(
   {
@@ -46,10 +47,14 @@ const refreshTokenSchema = new mongoose.Schema(
 );
 
 // ─── Indexes ──────────────────────────────────────────────────────────────────
-refreshTokenSchema.index({ tokenHash: 1 }, { unique: true });
 refreshTokenSchema.index({ user: 1 });
-refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index
+refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // MongoDB TTL auto-cleanup
 refreshTokenSchema.index({ user: 1, isRevoked: 1 });
+
+// ─── Static methods ───────────────────────────────────────────────────────────
+refreshTokenSchema.statics.hashToken = (rawToken) => {
+  return crypto.createHash('sha256').update(rawToken).digest('hex');
+};
 
 // ─── Instance methods ─────────────────────────────────────────────────────────
 refreshTokenSchema.methods.isExpired = function () {
@@ -62,4 +67,3 @@ refreshTokenSchema.methods.isActive = function () {
 
 const RefreshToken = mongoose.model('RefreshToken', refreshTokenSchema);
 export default RefreshToken;
-

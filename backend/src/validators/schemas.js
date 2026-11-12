@@ -62,28 +62,48 @@ export const dateRangeSchema = z.object({
 );
 
 // ─── Auth validators ──────────────────────────────────────────────────────────
-export const registerSchema = z.object({
-  firstName: z
-    .string()
-    .trim()
-    .min(2, 'First name must be at least 2 characters')
-    .max(50, 'First name cannot exceed 50 characters'),
-  lastName: z
-    .string()
-    .trim()
-    .min(2, 'Last name must be at least 2 characters')
-    .max(50, 'Last name cannot exceed 50 characters'),
-  email: emailSchema,
-  password: passwordSchema,
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match',
-  path: ['confirmPassword'],
-});
+export const registerSchema = z
+  .object({
+    fullName: z
+      .string()
+      .trim()
+      .min(2, 'Full name must be at least 2 characters')
+      .max(100, 'Full name cannot exceed 100 characters')
+      .optional(),
+    firstName: z.string().trim().min(2).max(50).optional(),
+    lastName: z.string().trim().min(2).max(50).optional(),
+    email: emailSchema,
+    password: passwordSchema,
+    confirmPassword: z.string().optional(),
+  })
+  .transform((data) => {
+    if (!data.fullName && (data.firstName || data.lastName)) {
+      data.fullName = `${data.firstName || ''} ${data.lastName || ''}`.trim();
+    }
+    return data;
+  })
+  .refine((data) => !data.confirmPassword || data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  })
+  .refine((data) => !!data.fullName, {
+    message: 'Full name is required',
+    path: ['fullName'],
+  });
 
 export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, 'Password is required'),
+});
+
+export const updateUserMeSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(2, 'Full name must be at least 2 characters')
+    .max(100, 'Full name cannot exceed 100 characters')
+    .optional(),
+  profileImage: z.string().nullable().optional(),
 });
 
 export const forgotPasswordSchema = z.object({
@@ -118,65 +138,380 @@ export const updateProfileSchema = z.object({
 }).strict();
 
 // ─── Finance validators ───────────────────────────────────────────────────────
-export const createTransactionSchema = z.object({
-  type: z.enum(['income', 'expense', 'transfer'], {
-    errorMap: () => ({ message: 'Type must be income, expense, or transfer' }),
-  }),
-  amount: positiveNumberSchema,
-  currency: z.string().length(3).toUpperCase().default('INR'),
-  category: mongoIdSchema,
-  description: z.string().trim().max(500).default(''),
-  notes: z.string().trim().max(1000).optional().nullable(),
-  date: z.coerce.date(),
-  paymentMethod: z
-    .enum(['cash', 'card', 'upi', 'netbanking', 'cheque', 'wallet', 'other'])
-    .default('other'),
-  tags: z.array(z.string().trim().max(30)).max(10).default([]),
-  isFoodExpense: z.boolean().default(false),
-  merchantName: z.string().trim().max(100).optional().nullable(),
-  location: z.string().trim().max(200).optional().nullable(),
-});
+export const createTransactionSchema = z
+  .object({
+    type: z.enum(['income', 'expense', 'INCOME', 'EXPENSE'], {
+      errorMap: () => ({ message: 'Type must be INCOME or EXPENSE' }),
+    }),
+    amount: positiveNumberSchema,
+    currency: z.string().length(3).toUpperCase().default('INR'),
+    category: mongoIdSchema,
+    title: z.string().trim().max(150).optional(),
+    description: z.string().trim().max(500).default(''),
+    merchant: z.string().trim().max(100).optional().nullable(),
+    merchantName: z.string().trim().max(100).optional().nullable(),
+    source: z.string().trim().max(100).optional().nullable(),
+    paymentMethod: z
+      .string()
+      .default('OTHER'),
+    transactionDate: z.coerce.date().optional(),
+    date: z.coerce.date().optional(),
+    recurringTransactionId: mongoIdSchema.optional().nullable(),
+    receiptUrl: z.string().trim().optional().nullable(),
+    tags: z.array(z.string().trim().max(30)).max(10).default([]),
+    notes: z.string().trim().max(1000).optional().nullable(),
+    isFoodExpense: z.boolean().default(false),
+    location: z.string().trim().max(200).optional().nullable(),
+  })
+  .transform((data) => {
+    data.type = data.type.toUpperCase();
+    if (!data.title) {
+      data.title = data.description || 'Transaction';
+    }
+    if (!data.merchant) {
+      data.merchant = data.merchantName || data.source || null;
+    }
+    if (!data.transactionDate) {
+      data.transactionDate = data.date || new Date();
+    }
+    return data;
+  });
+
+export const updateTransactionSchema = z
+  .object({
+    type: z.enum(['income', 'expense', 'INCOME', 'EXPENSE']).optional(),
+    amount: positiveNumberSchema.optional(),
+    currency: z.string().length(3).toUpperCase().optional(),
+    category: mongoIdSchema.optional(),
+    title: z.string().trim().min(1).max(150).optional(),
+    description: z.string().trim().max(500).optional(),
+    merchant: z.string().trim().max(100).optional().nullable(),
+    merchantName: z.string().trim().max(100).optional().nullable(),
+    source: z.string().trim().max(100).optional().nullable(),
+    paymentMethod: z.string().optional(),
+    transactionDate: z.coerce.date().optional(),
+    date: z.coerce.date().optional(),
+    recurringTransactionId: mongoIdSchema.optional().nullable(),
+    receiptUrl: z.string().trim().optional().nullable(),
+    tags: z.array(z.string().trim().max(30)).max(10).optional(),
+    notes: z.string().trim().max(1000).optional().nullable(),
+    isFoodExpense: z.boolean().optional(),
+    location: z.string().trim().max(200).optional().nullable(),
+  })
+  .transform((data) => {
+    if (data.type) data.type = data.type.toUpperCase();
+    if (!data.merchant && (data.merchantName || data.source)) {
+      data.merchant = data.merchantName || data.source || null;
+    }
+    if (!data.transactionDate && data.date) {
+      data.transactionDate = data.date;
+    }
+    return data;
+  });
 
 export const transactionQuerySchema = paginationSchema.merge(dateRangeSchema).extend({
-  type: z.enum(['income', 'expense', 'transfer']).optional(),
+  type: z.enum(['income', 'expense', 'INCOME', 'EXPENSE']).optional(),
   category: mongoIdSchema.optional(),
   paymentMethod: z.string().optional(),
   search: z.string().trim().max(100).optional(),
-  sortBy: z.enum(['date', 'amount', 'createdAt']).default('date'),
+  sortBy: z.enum(['transactionDate', 'date', 'amount', 'createdAt', 'title']).default('transactionDate'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
   minAmount: z.coerce.number().optional(),
   maxAmount: z.coerce.number().optional(),
+}).transform((data) => {
+  if (data.type) data.type = data.type.toUpperCase();
+  if (data.sortBy === 'date') data.sortBy = 'transactionDate';
+  return data;
 });
 
-export const createBudgetSchema = z.object({
-  name: z.string().trim().min(1).max(100),
-  period: z.enum(['weekly', 'monthly', 'yearly']),
-  periodStartDate: z.coerce.date(),
-  periodEndDate: z.coerce.date(),
-  totalBudget: positiveNumberSchema,
-  currency: z.string().length(3).toUpperCase().default('INR'),
-  categoryLimits: z.array(z.object({
-    category: mongoIdSchema,
-    limit: positiveNumberSchema,
-    alertThreshold: z.number().int().min(1).max(100).default(80),
-  })).default([]),
-  alertsEnabled: z.boolean().default(true),
-  notes: z.string().trim().max(500).optional().nullable(),
-}).refine((d) => d.periodStartDate <= d.periodEndDate, {
-  message: 'Start date must be before end date',
-  path: ['periodEndDate'],
+export const createCategorySchema = z.object({
+  name: z.string().trim().min(1, 'Category name is required').max(50),
+  type: z.enum(['INCOME', 'EXPENSE', 'BOTH', 'income', 'expense', 'both'], {
+    errorMap: () => ({ message: 'Type must be INCOME, EXPENSE, or BOTH' }),
+  }).transform((v) => v.toUpperCase()),
+  icon: z.string().trim().max(50).default('tag'),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color')
+    .default('#6366f1'),
+  description: z.string().trim().max(200).optional().nullable(),
+});
+
+export const updateCategorySchema = z.object({
+  name: z.string().trim().min(1).max(50).optional(),
+  type: z.enum(['INCOME', 'EXPENSE', 'BOTH', 'income', 'expense', 'both']).transform((v) => v.toUpperCase()).optional(),
+  icon: z.string().trim().max(50).optional(),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color')
+    .optional(),
+  description: z.string().trim().max(200).optional().nullable(),
+  isActive: z.boolean().optional(),
+});
+
+export const createBudgetSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Budget name is required').max(100, 'Budget name cannot exceed 100 characters'),
+    budgetType: z
+      .enum(['CATEGORY', 'OVERALL', 'category', 'overall'], {
+        errorMap: () => ({ message: 'Budget type must be CATEGORY or OVERALL' }),
+      })
+      .default('CATEGORY')
+      .transform((v) => v.toUpperCase()),
+    category: mongoIdSchema.optional().nullable(),
+    amount: positiveNumberSchema.optional(),
+    totalBudget: positiveNumberSchema.optional(),
+    currency: z.string().length(3).toUpperCase().default('INR'),
+    period: z
+      .enum(['WEEKLY', 'MONTHLY', 'CUSTOM', 'weekly', 'monthly', 'custom'], {
+        errorMap: () => ({ message: 'Period must be WEEKLY, MONTHLY, or CUSTOM' }),
+      })
+      .default('MONTHLY')
+      .transform((v) => v.toUpperCase()),
+    startDate: z.coerce.date().optional(),
+    periodStartDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+    periodEndDate: z.coerce.date().optional(),
+    alertThreshold: z.coerce
+      .number()
+      .min(1, 'Alert threshold must be at least 1%')
+      .max(100, 'Alert threshold cannot exceed 100%')
+      .default(80),
+    isActive: z.boolean().default(true),
+    notes: z.string().trim().max(500).optional().nullable(),
+  })
+  .transform((data) => {
+    if (!data.amount && data.totalBudget) data.amount = data.totalBudget;
+    if (!data.startDate && data.periodStartDate) data.startDate = data.periodStartDate;
+    if (!data.endDate && data.periodEndDate) data.endDate = data.periodEndDate;
+    return data;
+  })
+  .refine((data) => data.amount !== undefined && data.amount > 0, {
+    message: 'Budget amount is required and must be greater than 0',
+    path: ['amount'],
+  })
+  .refine(
+    (data) => {
+      if (data.budgetType === 'CATEGORY' && !data.category) return false;
+      return true;
+    },
+    {
+      message: 'Category is required for CATEGORY budget type',
+      path: ['category'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.period === 'CUSTOM' && (!data.startDate || !data.endDate)) return false;
+      return true;
+    },
+    {
+      message: 'Start date and end date are required for CUSTOM period',
+      path: ['endDate'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.startDate && data.endDate && data.startDate >= data.endDate) return false;
+      return true;
+    },
+    {
+      message: 'Start date must be before end date',
+      path: ['endDate'],
+    }
+  );
+
+export const updateBudgetSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+    budgetType: z.enum(['CATEGORY', 'OVERALL', 'category', 'overall']).transform((v) => v.toUpperCase()).optional(),
+    category: mongoIdSchema.optional().nullable(),
+    amount: positiveNumberSchema.optional(),
+    totalBudget: positiveNumberSchema.optional(),
+    currency: z.string().length(3).toUpperCase().optional(),
+    period: z.enum(['WEEKLY', 'MONTHLY', 'CUSTOM', 'weekly', 'monthly', 'custom']).transform((v) => v.toUpperCase()).optional(),
+    startDate: z.coerce.date().optional(),
+    periodStartDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+    periodEndDate: z.coerce.date().optional(),
+    alertThreshold: z.coerce.number().min(1).max(100).optional(),
+    isActive: z.boolean().optional(),
+    notes: z.string().trim().max(500).optional().nullable(),
+  })
+  .transform((data) => {
+    if (!data.amount && data.totalBudget) data.amount = data.totalBudget;
+    if (!data.startDate && data.periodStartDate) data.startDate = data.periodStartDate;
+    if (!data.endDate && data.periodEndDate) data.endDate = data.periodEndDate;
+    return data;
+  })
+  .refine(
+    (data) => {
+      if (data.startDate && data.endDate && data.startDate >= data.endDate) return false;
+      return true;
+    },
+    {
+      message: 'Start date must be before end date',
+      path: ['endDate'],
+    }
+  );
+
+export const budgetQuerySchema = z.object({
+  budgetType: z.enum(['CATEGORY', 'OVERALL', 'category', 'overall']).transform((v) => v.toUpperCase()).optional(),
+  period: z.enum(['WEEKLY', 'MONTHLY', 'CUSTOM', 'weekly', 'monthly', 'custom']).transform((v) => v.toUpperCase()).optional(),
+  category: mongoIdSchema.optional(),
+  isActive: z.preprocess((val) => {
+    if (val === 'true' || val === true) return true;
+    if (val === 'false' || val === false) return false;
+    return val;
+  }, z.boolean().optional()),
+  search: z.string().trim().max(100).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
 });
 
 export const createSavingsGoalSchema = z.object({
-  name: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1, 'Goal name is required').max(100, 'Goal name cannot exceed 100 characters'),
   description: z.string().trim().max(500).optional().nullable(),
   targetAmount: positiveNumberSchema,
   currency: z.string().length(3).toUpperCase().default('INR'),
   targetDate: z.coerce.date().optional().nullable(),
-  category: z.enum(['emergency_fund', 'travel', 'education', 'home', 'vehicle', 'investment', 'other']).default('other'),
+  status: z
+    .enum(['ACTIVE', 'COMPLETED', 'PAUSED', 'CANCELLED', 'active', 'completed', 'paused', 'cancelled'])
+    .transform((v) => v.toUpperCase())
+    .default('ACTIVE'),
+  category: z.string().trim().max(50).default('General'),
   icon: z.string().max(50).default('piggy-bank'),
-  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#10b981'),
-  monthlyContribution: positiveNumberSchema.optional().nullable(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color').default('#10b981'),
+});
+
+export const updateSavingsGoalSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  description: z.string().trim().max(500).optional().nullable(),
+  targetAmount: positiveNumberSchema.optional(),
+  currency: z.string().length(3).toUpperCase().optional(),
+  targetDate: z.coerce.date().optional().nullable(),
+  status: z
+    .enum(['ACTIVE', 'COMPLETED', 'PAUSED', 'CANCELLED', 'active', 'completed', 'paused', 'cancelled'])
+    .transform((v) => v.toUpperCase())
+    .optional(),
+  category: z.string().trim().max(50).optional(),
+  icon: z.string().max(50).optional(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+});
+
+export const savingsGoalStatusSchema = z.object({
+  status: z
+    .enum(['ACTIVE', 'COMPLETED', 'PAUSED', 'CANCELLED', 'active', 'completed', 'paused', 'cancelled'])
+    .transform((v) => v.toUpperCase()),
+});
+
+export const savingsGoalQuerySchema = z.object({
+  status: z.enum(['ACTIVE', 'COMPLETED', 'PAUSED', 'CANCELLED', 'active', 'completed', 'paused', 'cancelled']).transform((v) => v.toUpperCase()).optional(),
+  category: z.string().optional(),
+  search: z.string().trim().max(100).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+});
+
+export const createContributionSchema = z.object({
+  amount: positiveNumberSchema,
+  contributionDate: z.coerce.date().default(() => new Date()),
+  source: z.enum(['MANUAL', 'TRANSACTION', 'manual', 'transaction']).transform((v) => v.toUpperCase()).default('MANUAL'),
+  transactionId: mongoIdSchema.optional().nullable(),
+  description: z.string().trim().max(200).default(''),
+  notes: z.string().trim().max(500).optional().nullable(),
+});
+
+export const addContributionSchema = createContributionSchema;
+
+export const updateContributionSchema = z.object({
+  amount: positiveNumberSchema.optional(),
+  contributionDate: z.coerce.date().optional(),
+  description: z.string().trim().max(200).optional(),
+  notes: z.string().trim().max(500).optional().nullable(),
+});
+
+// ─── Recurring Transactions Validators ────────────────────────────────────────
+export const createRecurringTransactionSchema = z
+  .object({
+    type: z.enum(['INCOME', 'EXPENSE', 'income', 'expense']).transform((v) => v.toUpperCase()),
+    title: z.string().trim().min(1, 'Title is required').max(150),
+    description: z.string().trim().max(500).default(''),
+    amount: positiveNumberSchema,
+    currency: z.string().length(3).toUpperCase().default('INR'),
+    category: mongoIdSchema,
+    paymentMethod: z.string().default('OTHER'),
+    frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'daily', 'weekly', 'monthly', 'yearly']).transform((v) => v.toUpperCase()),
+    interval: z.coerce.number().int().positive().default(1),
+    startDate: z.coerce.date().default(() => new Date()),
+    nextOccurrence: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional().nullable(),
+    isActive: z.boolean().default(true),
+    timezone: z.string().default('UTC'),
+  })
+  .transform((data) => {
+    if (!data.nextOccurrence) {
+      data.nextOccurrence = data.startDate;
+    }
+    return data;
+  })
+  .refine(
+    (data) => {
+      if (data.endDate && data.startDate && data.startDate > data.endDate) return false;
+      return true;
+    },
+    {
+      message: 'Start date must be before or equal to end date',
+      path: ['endDate'],
+    }
+  );
+
+export const recurringStatusSchema = z.object({
+  isActive: z.boolean({ required_error: 'isActive is required' }),
+});
+
+export const updateRecurringTransactionSchema = z
+  .object({
+    type: z.enum(['INCOME', 'EXPENSE', 'income', 'expense']).transform((v) => v.toUpperCase()).optional(),
+    title: z.string().trim().min(1).max(150).optional(),
+    description: z.string().trim().max(500).optional(),
+    amount: positiveNumberSchema.optional(),
+    currency: z.string().length(3).toUpperCase().optional(),
+    category: mongoIdSchema.optional(),
+    paymentMethod: z.string().optional(),
+    frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'daily', 'weekly', 'monthly', 'yearly']).transform((v) => v.toUpperCase()).optional(),
+    interval: z.coerce.number().int().positive().optional(),
+    startDate: z.coerce.date().optional(),
+    nextOccurrence: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional().nullable(),
+    isActive: z.boolean().optional(),
+    timezone: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.endDate && data.startDate && data.startDate > data.endDate) return false;
+      return true;
+    },
+    {
+      message: 'Start date must be before or equal to end date',
+      path: ['endDate'],
+    }
+  );
+
+export const recurringTransactionQuerySchema = z.object({
+  type: z.enum(['INCOME', 'EXPENSE', 'income', 'expense']).transform((v) => v.toUpperCase()).optional(),
+  category: mongoIdSchema.optional(),
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'daily', 'weekly', 'monthly', 'yearly']).transform((v) => v.toUpperCase()).optional(),
+  isActive: z.preprocess((val) => {
+    if (val === 'true' || val === true) return true;
+    if (val === 'false' || val === false) return false;
+    return val;
+  }, z.boolean().optional()),
+  search: z.string().trim().max(100).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
 });
 
 // ─── Nutrition validators ─────────────────────────────────────────────────────

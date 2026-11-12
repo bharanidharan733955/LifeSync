@@ -1,92 +1,96 @@
 import mongoose from 'mongoose';
 
 // ─── SavingsGoal model ────────────────────────────────────────────────────────
+// Dynamic progress calculated from associated SavingsContribution records.
+// Supports status: ACTIVE, COMPLETED, PAUSED, CANCELLED.
 
 const savingsGoalSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: [true, 'User is required'],
+      index: true,
     },
     name: {
       type: String,
       required: [true, 'Goal name is required'],
       trim: true,
-      maxlength: 100,
+      maxlength: [100, 'Goal name cannot exceed 100 characters'],
     },
     description: {
       type: String,
       trim: true,
-      maxlength: 500,
+      maxlength: [500, 'Description cannot exceed 500 characters'],
       default: null,
     },
     targetAmount: {
       type: mongoose.Schema.Types.Decimal128,
       required: [true, 'Target amount is required'],
       validate: {
-        validator(v) { return parseFloat(v.toString()) > 0; },
+        validator(v) {
+          if (v == null) return false;
+          const val = parseFloat(v.toString());
+          return !isNaN(val) && val > 0;
+        },
         message: 'Target amount must be greater than 0',
       },
     },
-    currentAmount: {
-      type: mongoose.Schema.Types.Decimal128,
-      default: mongoose.Types.Decimal128.fromString('0.00'),
+    currency: {
+      type: String,
+      default: 'INR',
+      uppercase: true,
+      maxlength: 3,
     },
-    currency: { type: String, default: 'INR', uppercase: true, maxlength: 3 },
     targetDate: {
       type: Date,
       default: null,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: {
+        values: ['ACTIVE', 'COMPLETED', 'PAUSED', 'CANCELLED'],
+        message: 'Status must be ACTIVE, COMPLETED, PAUSED, or CANCELLED',
+      },
+      set: (v) => (v ? v.toUpperCase() : v),
+      default: 'ACTIVE',
+      index: true,
     },
     category: {
       type: String,
-      enum: ['emergency_fund', 'travel', 'education', 'home', 'vehicle', 'investment', 'other'],
-      default: 'other',
+      trim: true,
+      maxlength: 50,
+      default: 'General',
     },
-    icon: { type: String, default: 'piggy-bank' },
-    color: { type: String, default: '#10b981' },
-    isCompleted: { type: Boolean, default: false },
-    completedAt: { type: Date, default: null },
-    isActive: { type: Boolean, default: true },
-    // Monthly auto-save contribution
-    monthlyContribution: {
-      type: mongoose.Schema.Types.Decimal128,
-      default: null,
+    icon: {
+      type: String,
+      trim: true,
+      maxlength: 50,
+      default: 'piggy-bank',
     },
-    contributions: [
-      {
-        amount: { type: mongoose.Schema.Types.Decimal128, required: true },
-        note: { type: String, trim: true, maxlength: 200 },
-        date: { type: Date, default: Date.now },
-      },
-    ],
+    color: {
+      type: String,
+      trim: true,
+      default: '#10b981',
+      match: [/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color'],
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
-savingsGoalSchema.index({ user: 1, isActive: 1 });
-savingsGoalSchema.index({ user: 1, isCompleted: 1 });
+savingsGoalSchema.index({ user: 1, status: 1 });
 savingsGoalSchema.index({ user: 1, targetDate: 1 });
-
-savingsGoalSchema.virtual('progressPercent').get(function () {
-  const current = parseFloat(this.currentAmount?.toString() ?? '0');
-  const target = parseFloat(this.targetAmount?.toString() ?? '1');
-  return Math.min(100, Math.round((current / target) * 100 * 10) / 10);
-});
 
 savingsGoalSchema.set('toJSON', {
   virtuals: true,
   transform(doc, ret) {
-    for (const key of ['targetAmount', 'currentAmount', 'monthlyContribution']) {
-      if (ret[key] instanceof mongoose.Types.Decimal128) {
-        ret[key] = parseFloat(ret[key].toString());
-      }
-    }
-    if (Array.isArray(ret.contributions)) {
-      ret.contributions = ret.contributions.map((c) => ({
-        ...c,
-        amount: c.amount instanceof mongoose.Types.Decimal128 ? parseFloat(c.amount.toString()) : c.amount,
-      }));
+    if (ret.targetAmount != null) {
+      ret.targetAmount = parseFloat(ret.targetAmount.toString());
     }
     delete ret.__v;
     return ret;
@@ -95,4 +99,3 @@ savingsGoalSchema.set('toJSON', {
 
 const SavingsGoal = mongoose.model('SavingsGoal', savingsGoalSchema);
 export default SavingsGoal;
-

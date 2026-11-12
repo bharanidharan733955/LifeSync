@@ -28,7 +28,7 @@ export const env = {
   JWT_ACCESS_SECRET: optional('JWT_ACCESS_SECRET', 'dev_access_secret_change_in_production'),
   JWT_REFRESH_SECRET: optional('JWT_REFRESH_SECRET', 'dev_refresh_secret_change_in_production'),
   JWT_ACCESS_EXPIRES_IN: optional('JWT_ACCESS_EXPIRES_IN', '15m'),
-  JWT_REFRESH_EXPIRES_IN: optional('JWT_REFRESH_EXPIRES_IN', '30d'),
+  JWT_REFRESH_EXPIRES_IN: optional('JWT_REFRESH_EXPIRES_IN', '7d'),
 
   // Email
   SMTP_HOST: optional('SMTP_HOST', 'smtp.gmail.com'),
@@ -68,6 +68,10 @@ export const env = {
 
   // Cookie
   COOKIE_SECRET: optional('COOKIE_SECRET', 'dev_cookie_secret_change_in_production'),
+  COOKIE_SAME_SITE: optional('COOKIE_SAME_SITE', ''),
+
+  // Static serving
+  SERVE_STATIC: optional('SERVE_STATIC', 'false') === 'true',
 
   // Swagger
   SWAGGER_ENABLED: optional('SWAGGER_ENABLED', 'true') === 'true',

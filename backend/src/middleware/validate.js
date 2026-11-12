@@ -13,7 +13,9 @@ export const validate = (schema, source = 'body') => {
   return (req, res, next) => {
     const result = schema.safeParse(req[source]);
     if (!result.success) {
-      const errors = result.error.errors.map((e) => ({
+      // Zod v4 uses `result.error.issues`; v3 used `.errors`
+      const issues = result.error.issues || result.error.errors || [];
+      const errors = issues.map((e) => ({
         field: e.path.join('.'),
         message: e.message,
         code: e.code,
@@ -25,8 +27,19 @@ export const validate = (schema, source = 'body') => {
         errors,
       });
     }
-    // Replace req[source] with the parsed (and potentially transformed) data
-    req[source] = result.data;
+
+    // Express 5 makes req.query a read-only getter, so we cannot assign it directly.
+    // Instead, merge parsed properties into the existing object for 'query',
+    // or replace body/params normally.
+    if (source === 'query') {
+      // Clear existing query keys and merge in the parsed result
+      const parsed = result.data;
+      for (const key of Object.keys(parsed)) {
+        req.query[key] = parsed[key];
+      }
+    } else {
+      req[source] = result.data;
+    }
     next();
   };
 };
@@ -42,14 +55,22 @@ export const validateRequest = (schemas) => {
     for (const [source, schema] of Object.entries(schemas)) {
       const result = schema.safeParse(req[source]);
       if (!result.success) {
-        const errors = result.error.errors.map((e) => ({
+        const issues = result.error.issues || result.error.errors || [];
+        const errors = issues.map((e) => ({
           field: `${source}.${e.path.join('.')}`,
           message: e.message,
           code: e.code,
         }));
         allErrors.push(...errors);
       } else {
-        req[source] = result.data;
+        if (source === 'query') {
+          const parsed = result.data;
+          for (const key of Object.keys(parsed)) {
+            req.query[key] = parsed[key];
+          }
+        } else {
+          req[source] = result.data;
+        }
       }
     }
 
@@ -67,4 +88,3 @@ export const validateRequest = (schemas) => {
 };
 
 export default validate;
-

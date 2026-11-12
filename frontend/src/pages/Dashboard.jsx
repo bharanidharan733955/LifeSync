@@ -1,13 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   Wallet,
-  Utensils,
-  Candy,
-  Droplet,
   TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
-  Sparkles,
+  Target,
+  Layers,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -34,12 +32,8 @@ export default function Dashboard() {
   const [metrics, setMetrics] = useState({
     income: 75400,
     expenses: 32650,
-    calories: 1840,
-    calorieTarget: 2200,
-    sugarGrams: 28,
-    sugarLimit: 36,
-    waterMl: 2200,
-    waterTarget: 3000,
+    budgetsActive: 0,
+    savingsProgress: 0,
   });
 
   useEffect(() => {
@@ -65,14 +59,8 @@ export default function Dashboard() {
             Welcome back to LifeTrack 👋
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Here is your financial and nutritional synchronization for today.
+            Here is your financial overview for today.
           </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm flex items-center gap-2">
-            <Sparkles className="w-4 h-4" />
-            AI Daily Advice
-          </button>
         </div>
       </div>
 
@@ -97,71 +85,67 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Calories Card */}
+        {/* Income Card */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Calories Consumed</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Income</span>
             <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
-              <Utensils className="w-4 h-4" />
+              <TrendingUp className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
             <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-              {metrics.calories} <span className="text-sm font-normal text-slate-500">/ {metrics.calorieTarget} kcal</span>
+              ₹{metrics.income.toLocaleString('en-IN')}
             </div>
-            <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-3 overflow-hidden">
-              <div
-                className="bg-emerald-500 h-full rounded-full transition-all"
-                style={{ width: `${(metrics.calories / metrics.calorieTarget) * 100}%` }}
-              />
+            <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-emerald-600">
+              <ArrowUpRight className="w-3.5 h-3.5" />
+              <span>This month</span>
             </div>
           </div>
         </div>
 
-        {/* Sugar Intake Card */}
+        {/* Expenses Card */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Sugar Tracker</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Expenses</span>
             <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600">
-              <Candy className="w-4 h-4" />
+              <ArrowDownRight className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
             <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-              {metrics.sugarGrams}g <span className="text-sm font-normal text-slate-500">/ {metrics.sugarLimit}g max</span>
+              ₹{metrics.expenses.toLocaleString('en-IN')}
             </div>
-            <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-3 overflow-hidden">
-              <div
-                className="bg-rose-500 h-full rounded-full transition-all"
-                style={{ width: `${(metrics.sugarGrams / metrics.sugarLimit) * 100}%` }}
-              />
+            <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-rose-600">
+              <ArrowDownRight className="w-3.5 h-3.5" />
+              <span>This month</span>
             </div>
           </div>
         </div>
 
-        {/* Water Hydration Card */}
+        {/* Savings Rate Card */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Water Intake</span>
-            <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/50 text-sky-600">
-              <Droplet className="w-4 h-4" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Savings Rate</span>
+            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600">
+              <Target className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
             <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-              {metrics.waterMl}ml <span className="text-sm font-normal text-slate-500">/ {metrics.waterTarget}ml</span>
+              {metrics.income > 0 ? Math.round(((metrics.income - metrics.expenses) / metrics.income) * 100) : 0}%
             </div>
             <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-3 overflow-hidden">
               <div
-                className="bg-sky-500 h-full rounded-full transition-all"
-                style={{ width: `${(metrics.waterMl / metrics.waterTarget) * 100}%` }}
+                className="bg-indigo-500 h-full rounded-full transition-all"
+                style={{ width: `${metrics.income > 0 ? Math.min(100, ((metrics.income - metrics.expenses) / metrics.income) * 100) : 0}%` }}
               />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Analytics Chart & Food Diary Snapshot */}
+      {/* Analytics Chart & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -198,54 +182,46 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Today's Meals Quick Log */}
+        {/* Quick Actions Panel */}
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <div>
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Today's Nutrition Log</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Curated Indian & Healthy Diet</p>
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Quick Actions</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Manage your finances</p>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <div className="flex items-center gap-3">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <div>
-                    <h4 className="text-sm font-medium text-slate-800 dark:text-slate-200">Idli with Sambar (3 pcs)</h4>
-                    <p className="text-xs text-slate-400">Breakfast • 310 kcal</p>
-                  </div>
+              <a href="/finance" className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors">
+                <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600">
+                  <Wallet className="w-4 h-4" />
                 </div>
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">1.8g sugar</span>
-              </div>
+                <div>
+                  <h4 className="text-sm font-medium text-slate-800 dark:text-slate-200">Add Transaction</h4>
+                  <p className="text-xs text-slate-400">Record income or expense</p>
+                </div>
+              </a>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <div className="flex items-center gap-3">
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  <div>
-                    <h4 className="text-sm font-medium text-slate-800 dark:text-slate-200">Brown Rice & Dal Tadka</h4>
-                    <p className="text-xs text-slate-400">Lunch • 540 kcal</p>
-                  </div>
+              <a href="/budgets" className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors">
+                <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-950/50 text-amber-600">
+                  <Layers className="w-4 h-4" />
                 </div>
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">2.1g sugar</span>
-              </div>
+                <div>
+                  <h4 className="text-sm font-medium text-slate-800 dark:text-slate-200">View Budgets</h4>
+                  <p className="text-xs text-slate-400">Track spending against limits</p>
+                </div>
+              </a>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <div className="flex items-center gap-3">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                  <div>
-                    <h4 className="text-sm font-medium text-slate-800 dark:text-slate-200">Chapati with Paneer Bhurji</h4>
-                    <p className="text-xs text-slate-400">Dinner • 480 kcal</p>
-                  </div>
+              <a href="/savings-goals" className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors">
+                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600">
+                  <Target className="w-4 h-4" />
                 </div>
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">3.4g sugar</span>
-              </div>
+                <div>
+                  <h4 className="text-sm font-medium text-slate-800 dark:text-slate-200">Savings Goals</h4>
+                  <p className="text-xs text-slate-400">Check your progress</p>
+                </div>
+              </a>
             </div>
           </div>
-
-          <button className="w-full mt-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-xl transition-colors">
-            + Log New Meal
-          </button>
         </div>
       </div>
     </div>
   );
 }
-

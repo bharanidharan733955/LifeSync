@@ -3,25 +3,21 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Wallet,
-  UtensilsCrossed,
-  Candy,
-  CalendarCheck,
-  Dumbbell,
-  ShoppingCart,
-  Sparkles,
+  Layers,
+  Target,
+  Repeat,
   Settings,
+  User,
   HeartPulse,
 } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', path: '/', icon: LayoutDashboard },
   { name: 'Finance & Expenses', path: '/finance', icon: Wallet },
-  { name: 'Nutrition & Diet', path: '/nutrition', icon: UtensilsCrossed },
-  { name: 'Sugar Tracker', path: '/sugar', icon: Candy },
-  { name: 'Diet Planner', path: '/diet-planner', icon: CalendarCheck },
-  { name: 'Fitness & Lifestyle', path: '/fitness', icon: Dumbbell },
-  { name: 'Grocery Lists', path: '/grocery', icon: ShoppingCart },
-  { name: 'AI Assistant', path: '/ai-insights', icon: Sparkles },
+  { name: 'Budgets & Limits', path: '/budgets', icon: Layers },
+  { name: 'Savings Goals', path: '/savings-goals', icon: Target },
+  { name: 'Recurring Rules', path: '/recurring-transactions', icon: Repeat },
+  { name: 'Profile', path: '/profile', icon: User },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
@@ -62,15 +58,14 @@ export default function Sidebar() {
       <div className="p-4 border-t border-slate-200 dark:border-slate-800">
         <div className="p-3 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-slate-800 dark:to-slate-800/60 rounded-xl border border-indigo-100/50 dark:border-slate-700/50">
           <div className="flex items-center gap-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-1">
-            <Sparkles className="w-3.5 h-3.5" />
-            AI Diet & Finance
+            <Wallet className="w-3.5 h-3.5" />
+            Personal Finance
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            Personalized insights synced in real-time.
+            Track expenses, budgets, and savings goals.
           </p>
         </div>
       </div>
     </aside>
   );
 }
-

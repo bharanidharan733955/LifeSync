@@ -11,11 +11,11 @@ LifeTrack is a full-stack, production-grade application engineered for personal 
 - **Runtime**: Node.js (JavaScript ES Modules exclusively)
 - **Framework**: Express.js
 - **Database**: MongoDB Atlas + Mongoose ODM
-- **Authentication**: JWT (Access Token + Refresh Token Rotation with device tracking), bcrypt
+- **Authentication**: Traditional email & password auth with bcrypt (salt rounds: 12), short-lived JWT access tokens (15m), rotatable refresh tokens (7d) with reuse detection, and session revocation (`/logout`, `/logout-all`). Single user type (no role field).
 - **Validation**: Zod schema validation
 - **Documentation**: Swagger / OpenAPI (`/api-docs`)
-- **Security**: Helmet, CORS, Express Rate Limit, Cookie-Parser
-- **Testing**: Vitest with unit and precision calculation suites
+- **Security**: Helmet, CORS, Express Rate Limit, Cookie-Parser, In-Memory Mongo test runner
+- **Testing**: 35 Vitest unit and integration tests (precision arithmetic, user models, auth flows)
 
 ### Web Frontend
 - **Framework**: React + Vite (JavaScript only)

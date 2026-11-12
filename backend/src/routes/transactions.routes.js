@@ -1,86 +1,80 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { sendSuccess } from '../utils/apiResponse.js';
 import { validate } from '../middleware/validate.js';
-import { createTransactionSchema, transactionQuerySchema } from '../validators/schemas.js';
+import {
+  createTransactionSchema,
+  updateTransactionSchema,
+  transactionQuerySchema,
+} from '../validators/schemas.js';
+import * as transactionController from '../controllers/transactionController.js';
 
 const router = Router();
 
-// All routes require authentication
+// All transaction routes require authentication
 router.use(authenticate);
 
 /**
  * @swagger
- * /finance/transactions:
+ * /transactions:
  *   get:
  *     tags: [Finance - Transactions]
- *     summary: List transactions with pagination and filtering
- *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 20 }
- *       - in: query
- *         name: type
- *         schema: { type: string, enum: [income, expense, transfer] }
- *       - in: query
- *         name: startDate
- *         schema: { type: string, format: date }
- *       - in: query
- *         name: endDate
- *         schema: { type: string, format: date }
- *       - in: query
- *         name: search
- *         schema: { type: string }
- *     responses:
- *       200:
- *         description: Paginated list of transactions
+ *     summary: List transactions with pagination, filtering, search, and summary
  */
 router.get(
   '/',
   validate(transactionQuerySchema, 'query'),
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, {
-      message: 'Transactions endpoint ready. Implementation in Phase 3.',
-      data: [],
-      pagination: { total: 0, page: 1, limit: 20, totalPages: 0 },
-    });
-  })
+  asyncHandler(transactionController.getTransactions)
 );
 
 /**
  * @swagger
- * /finance/transactions:
+ * /transactions:
  *   post:
  *     tags: [Finance - Transactions]
- *     summary: Create a new transaction
+ *     summary: Create a new income or expense transaction
  */
 router.post(
   '/',
   validate(createTransactionSchema),
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, {
-      status: 201,
-      message: 'Create transaction endpoint ready. Implementation in Phase 3.',
-      data: req.body,
-    });
-  })
+  asyncHandler(transactionController.createTransaction)
 );
 
-router.get('/:id', asyncHandler(async (req, res) => {
-  sendSuccess(res, { message: 'Get transaction endpoint ready. Implementation in Phase 3.' });
-}));
+/**
+ * @swagger
+ * /transactions/{id}:
+ *   get:
+ *     tags: [Finance - Transactions]
+ *     summary: Get single transaction by ID
+ */
+router.get('/:id', asyncHandler(transactionController.getTransactionById));
 
-router.patch('/:id', asyncHandler(async (req, res) => {
-  sendSuccess(res, { message: 'Update transaction endpoint ready. Implementation in Phase 3.' });
-}));
+/**
+ * @swagger
+ * /transactions/{id}:
+ *   put:
+ *     tags: [Finance - Transactions]
+ *     summary: Update transaction by ID
+ */
+router.put(
+  '/:id',
+  validate(updateTransactionSchema),
+  asyncHandler(transactionController.updateTransaction)
+);
 
-router.delete('/:id', asyncHandler(async (req, res) => {
-  sendSuccess(res, { message: 'Delete transaction endpoint ready. Implementation in Phase 3.' });
-}));
+router.patch(
+  '/:id',
+  validate(updateTransactionSchema),
+  asyncHandler(transactionController.updateTransaction)
+);
+
+/**
+ * @swagger
+ * /transactions/{id}:
+ *   delete:
+ *     tags: [Finance - Transactions]
+ *     summary: Delete transaction by ID
+ */
+router.delete('/:id', asyncHandler(transactionController.deleteTransaction));
 
 export default router;
-

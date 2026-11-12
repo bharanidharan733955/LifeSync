@@ -1,22 +1,11 @@
 import { Router } from 'express';
-import { authLimiter, passwordResetLimiter } from '../middleware/rateLimiter.js';
+import { authLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
-import {
-  registerSchema,
-  loginSchema,
-  forgotPasswordSchema,
-  resetPasswordSchema,
-  changePasswordSchema,
-  updateProfileSchema,
-} from '../validators/schemas.js';
 import { authenticate } from '../middleware/authMiddleware.js';
-import { asyncHandler } from '../utils/asyncHandler.js';
-import { sendSuccess } from '../utils/apiResponse.js';
+import { registerSchema, loginSchema } from '../validators/schemas.js';
+import * as authController from '../controllers/authController.js';
 
 const router = Router();
-
-// ─── Stub controller responses (replaced in Phase 2) ─────────────────────────
-// These stubs return structured responses so Swagger and integration tests work.
 
 /**
  * @swagger
@@ -31,34 +20,21 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [firstName, lastName, email, password, confirmPassword]
+ *             required: [fullName, email, password]
  *             properties:
- *               firstName: { type: string, example: Priya }
- *               lastName: { type: string, example: Sharma }
+ *               fullName: { type: string, example: Priya Sharma }
  *               email: { type: string, example: priya@example.com }
  *               password: { type: string, example: SecurePass123 }
  *               confirmPassword: { type: string, example: SecurePass123 }
  *     responses:
  *       201:
- *         description: User registered successfully. Verification email sent.
- *       422:
- *         description: Validation error
+ *         description: User registered successfully. Returns user & tokens.
  *       409:
  *         description: Email already in use
+ *       422:
+ *         description: Validation error
  */
-router.post(
-  '/register',
-  authLimiter,
-  validate(registerSchema),
-  asyncHandler(async (req, res) => {
-    // TODO Phase 2: implement AuthController.register
-    sendSuccess(res, {
-      status: 201,
-      message: 'Registration endpoint ready. Implementation in Phase 2.',
-      data: { email: req.body.email },
-    });
-  })
-);
+router.post('/register', authLimiter, validate(registerSchema), authController.register);
 
 /**
  * @swagger
@@ -75,153 +51,81 @@ router.post(
  *             type: object
  *             required: [email, password]
  *             properties:
- *               email: { type: string }
- *               password: { type: string }
+ *               email: { type: string, example: priya@example.com }
+ *               password: { type: string, example: SecurePass123 }
  *     responses:
  *       200:
- *         description: Login successful
+ *         description: Login successful. Sets HTTP-only refresh cookie and returns access token.
  *       401:
  *         description: Invalid credentials
+ *       403:
+ *         description: Account suspended
  */
-router.post(
-  '/login',
-  authLimiter,
-  validate(loginSchema),
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, {
-      message: 'Login endpoint ready. Implementation in Phase 2.',
-      data: { email: req.body.email },
-    });
-  })
-);
+router.post('/login', authLimiter, validate(loginSchema), authController.login);
 
 /**
  * @swagger
- * /auth/refresh-token:
+ * /auth/refresh:
  *   post:
  *     tags: [Auth]
- *     summary: Refresh access token using refresh token
+ *     summary: Rotate and refresh access token session
  *     security: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken: { type: string, description: "Optional if passed via HTTP-only cookie" }
  *     responses:
  *       200:
- *         description: New access token issued
+ *         description: New access and rotated refresh token issued
  *       401:
  *         description: Invalid or expired refresh token
+ *       403:
+ *         description: Reuse detected or account suspended
  */
-router.post(
-  '/refresh-token',
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, { message: 'Refresh token endpoint ready. Implementation in Phase 2.' });
-  })
-);
+router.post('/refresh', authController.refresh);
 
 /**
  * @swagger
  * /auth/logout:
  *   post:
  *     tags: [Auth]
- *     summary: Logout and revoke refresh token
+ *     summary: Logout current session and revoke refresh token
  *     responses:
  *       200:
  *         description: Logged out successfully
  */
-router.post(
-  '/logout',
-  authenticate,
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, { message: 'Logout endpoint ready. Implementation in Phase 2.' });
-  })
-);
+router.post('/logout', authController.logout);
 
 /**
  * @swagger
- * /auth/verify-email/{token}:
- *   get:
+ * /auth/logout-all:
+ *   post:
  *     tags: [Auth]
- *     summary: Verify email address
- *     security: []
- *     parameters:
- *       - in: path
- *         name: token
- *         required: true
- *         schema: { type: string }
+ *     summary: Invalidate all active sessions for authenticated user
  *     responses:
  *       200:
- *         description: Email verified successfully
+ *         description: All active sessions logged out
+ *       401:
+ *         description: Unauthorized
  */
-router.get(
-  '/verify-email/:token',
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, { message: 'Email verification endpoint ready. Implementation in Phase 2.' });
-  })
-);
-
-/**
- * @swagger
- * /auth/forgot-password:
- *   post:
- *     tags: [Auth]
- *     summary: Request password reset email
- *     security: []
- */
-router.post(
-  '/forgot-password',
-  passwordResetLimiter,
-  validate(forgotPasswordSchema),
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, { message: 'Forgot password endpoint ready. Implementation in Phase 2.' });
-  })
-);
-
-/**
- * @swagger
- * /auth/reset-password:
- *   post:
- *     tags: [Auth]
- *     summary: Reset password using token from email
- *     security: []
- */
-router.post(
-  '/reset-password',
-  validate(resetPasswordSchema),
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, { message: 'Reset password endpoint ready. Implementation in Phase 2.' });
-  })
-);
-
-/**
- * @swagger
- * /auth/change-password:
- *   patch:
- *     tags: [Auth]
- *     summary: Change password (authenticated)
- */
-router.patch(
-  '/change-password',
-  authenticate,
-  validate(changePasswordSchema),
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, { message: 'Change password endpoint ready. Implementation in Phase 2.' });
-  })
-);
+router.post('/logout-all', authenticate, authController.logoutAll);
 
 /**
  * @swagger
  * /auth/me:
  *   get:
  *     tags: [Auth]
- *     summary: Get current authenticated user profile
+ *     summary: Get profile of authenticated user
+ *     responses:
+ *       200:
+ *         description: Authenticated user profile
+ *       401:
+ *         description: Unauthorized
  */
-router.get(
-  '/me',
-  authenticate,
-  asyncHandler(async (req, res) => {
-    sendSuccess(res, {
-      message: 'User profile endpoint ready. Implementation in Phase 2.',
-      data: { userId: req.userId },
-    });
-  })
-);
+router.get('/me', authenticate, authController.getMe);
 
 export default router;
-

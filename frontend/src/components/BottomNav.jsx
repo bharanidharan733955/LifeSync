@@ -3,16 +3,14 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Wallet,
-  UtensilsCrossed,
-  Sparkles,
+  Target,
   Settings,
 } from 'lucide-react';
 
 const mobileNavItems = [
   { name: 'Home', path: '/', icon: LayoutDashboard },
   { name: 'Finance', path: '/finance', icon: Wallet },
-  { name: 'Nutrition', path: '/nutrition', icon: UtensilsCrossed },
-  { name: 'AI', path: '/ai-insights', icon: Sparkles },
+  { name: 'Savings', path: '/savings-goals', icon: Target },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
@@ -41,4 +39,3 @@ export default function BottomNav() {
     </nav>
   );
 }
-

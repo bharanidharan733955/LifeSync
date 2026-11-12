@@ -2,8 +2,8 @@ import mongoose from 'mongoose';
 
 // ─── Transaction model ────────────────────────────────────────────────────────
 // Stores all income and expense transactions.
-// Amounts stored as Decimal128 to preserve precision.
-// user field is required and enforced – no IDOR possible if queries filter by req.userId.
+// Amounts stored as Decimal128 to preserve financial precision.
+// Strict user ownership – queries must always filter by req.userId.
 
 const transactionSchema = new mongoose.Schema(
   {
@@ -11,10 +11,15 @@ const transactionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'User is required'],
+      index: true,
     },
     type: {
       type: String,
-      enum: { values: ['income', 'expense', 'transfer'], message: 'Type must be income, expense, or transfer' },
+      enum: {
+        values: ['INCOME', 'EXPENSE', 'income', 'expense'],
+        message: 'Type must be INCOME or EXPENSE',
+      },
+      set: (v) => (v ? v.toUpperCase() : v),
       required: [true, 'Transaction type is required'],
     },
     amount: {
@@ -22,7 +27,9 @@ const transactionSchema = new mongoose.Schema(
       required: [true, 'Amount is required'],
       validate: {
         validator(v) {
-          return parseFloat(v.toString()) > 0;
+          if (v == null) return false;
+          const val = parseFloat(v.toString());
+          return !isNaN(val) && val > 0;
         },
         message: 'Amount must be greater than 0',
       },
@@ -37,6 +44,13 @@ const transactionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'FinanceCategory',
       required: [true, 'Category is required'],
+      index: true,
+    },
+    title: {
+      type: String,
+      required: [true, 'Title is required'],
+      trim: true,
+      maxlength: [150, 'Title cannot exceed 150 characters'],
     },
     description: {
       type: String,
@@ -44,64 +58,63 @@ const transactionSchema = new mongoose.Schema(
       maxlength: [500, 'Description cannot exceed 500 characters'],
       default: '',
     },
-    notes: {
+    merchant: {
       type: String,
       trim: true,
-      maxlength: [1000, 'Notes cannot exceed 1000 characters'],
+      maxlength: 100,
       default: null,
-    },
-    date: {
-      type: Date,
-      required: [true, 'Transaction date is required'],
-      validate: {
-        validator(v) {
-          // Allow dates up to 1 day in the future (for timezone edge cases)
-          return v <= new Date(Date.now() + 86400000);
-        },
-        message: 'Transaction date cannot be in the future',
-      },
     },
     paymentMethod: {
       type: String,
-      enum: ['cash', 'card', 'upi', 'netbanking', 'cheque', 'wallet', 'other'],
-      default: 'other',
-    },
-    tags: {
-      type: [String],
-      default: [],
-      validate: {
-        validator(v) {
-          return v.length <= 10;
-        },
-        message: 'Cannot have more than 10 tags per transaction',
+      enum: {
+        values: ['CASH', 'UPI', 'DEBIT_CARD', 'CREDIT_CARD', 'BANK_TRANSFER', 'WALLET', 'OTHER'],
+        message: 'Invalid payment method',
       },
-    },
-    attachments: [
-      {
-        url: { type: String, required: true },
-        name: { type: String, default: 'attachment' },
-        size: { type: Number, default: 0 },
+      set: (v) => {
+        if (!v) return 'OTHER';
+        const norm = v.toString().toUpperCase().trim().replace(/[\s-]+/g, '_');
+        if (norm === 'CARD') return 'DEBIT_CARD';
+        if (norm === 'NETBANKING' || norm === 'NET_BANKING') return 'BANK_TRANSFER';
+        if (norm === 'CHEQUE') return 'OTHER';
+        return norm;
       },
-    ],
-    isRecurring: {
-      type: Boolean,
-      default: false,
+      default: 'OTHER',
+    },
+    transactionDate: {
+      type: Date,
+      required: [true, 'Transaction date is required'],
+      default: Date.now,
+      index: true,
     },
     recurringTransactionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'RecurringTransaction',
       default: null,
     },
-    // For food/grocery expense tracking
+    receiptUrl: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    tags: {
+      type: [String],
+      default: [],
+      validate: {
+        validator(v) {
+          return !v || v.length <= 10;
+        },
+        message: 'Cannot have more than 10 tags per transaction',
+      },
+    },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [1000, 'Notes cannot exceed 1000 characters'],
+      default: null,
+    },
     isFoodExpense: {
       type: Boolean,
       default: false,
-    },
-    merchantName: {
-      type: String,
-      trim: true,
-      maxlength: 100,
-      default: null,
     },
     location: {
       type: String,
@@ -110,32 +123,59 @@ const transactionSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
 // ─── Indexes ──────────────────────────────────────────────────────────────────
-transactionSchema.index({ user: 1, date: -1 });
-transactionSchema.index({ user: 1, type: 1, date: -1 });
-transactionSchema.index({ user: 1, category: 1, date: -1 });
-transactionSchema.index({ user: 1, isRecurring: 1 });
-transactionSchema.index({ user: 1, isFoodExpense: 1, date: -1 });
-// Text search index
-transactionSchema.index({ description: 'text', merchantName: 'text', notes: 'text' });
-// Compound for monthly summaries
-transactionSchema.index({ user: 1, type: 1, date: 1 });
+transactionSchema.index({ user: 1, transactionDate: -1 });
+transactionSchema.index({ user: 1, type: 1, transactionDate: -1 });
+transactionSchema.index({ user: 1, category: 1, transactionDate: -1 });
+transactionSchema.index({ user: 1, paymentMethod: 1 });
+transactionSchema.index({ title: 'text', merchant: 'text', description: 'text' });
 
-// ─── Virtual: amount as number ────────────────────────────────────────────────
+// ─── Virtual: amountNumber ───────────────────────────────────────────────────
 transactionSchema.virtual('amountNumber').get(function () {
   return parseFloat(this.amount?.toString() ?? '0');
 });
+
+// ─── Aliases for compatibility ───────────────────────────────────────────────
+transactionSchema.virtual('date')
+  .get(function () {
+    return this.transactionDate;
+  })
+  .set(function (val) {
+    this.transactionDate = val;
+  });
+
+transactionSchema.virtual('merchantName')
+  .get(function () {
+    return this.merchant;
+  })
+  .set(function (val) {
+    this.merchant = val;
+  });
+
+transactionSchema.virtual('source')
+  .get(function () {
+    return this.merchant;
+  })
+  .set(function (val) {
+    this.merchant = val;
+  });
 
 // ─── toJSON transform ─────────────────────────────────────────────────────────
 transactionSchema.set('toJSON', {
   virtuals: true,
   transform(doc, ret) {
-    if (ret.amount instanceof mongoose.Types.Decimal128) {
+    if (ret.amount != null) {
       ret.amount = parseFloat(ret.amount.toString());
     }
+    ret.date = ret.transactionDate;
+    ret.merchantName = ret.merchant;
     delete ret.__v;
     return ret;
   },
@@ -143,4 +183,3 @@ transactionSchema.set('toJSON', {
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 export default Transaction;
-

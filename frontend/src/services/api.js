@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1',
+  baseURL:
+    import.meta.env.VITE_API_URL ||
+    (import.meta.env.PROD ? '/api/v1' : 'http://localhost:5000/api/v1'),
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -25,11 +27,16 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/auth/login')) {
+    const isAuthRoute =
+      originalRequest?.url?.includes('/auth/login') ||
+      originalRequest?.url?.includes('/auth/refresh') ||
+      originalRequest?.url?.includes('/auth/register');
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRoute) {
       originalRequest._retry = true;
       try {
         const refreshResponse = await axios.post(
-          `${api.defaults.baseURL}/auth/refresh-token`,
+          `${api.defaults.baseURL}/auth/refresh`,
           {},
           { withCredentials: true }
         );
@@ -41,7 +48,6 @@ api.interceptors.response.use(
         }
       } catch (refreshError) {
         localStorage.removeItem('accessToken');
-        window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }

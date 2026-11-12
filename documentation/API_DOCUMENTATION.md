@@ -38,31 +38,105 @@ Authorization: Bearer <jwt_access_token>
 ### 1. Authentication (`/auth`)
 | Method | Endpoint | Description | Auth Required |
 |---|---|---|---|
-| POST | `/auth/register` | Register new account | No |
-| POST | `/auth/login` | Login and receive access + refresh token | No |
-| POST | `/auth/refresh-token` | Issue new access token via refresh token | No |
-| POST | `/auth/logout` | Revoke active refresh token | Yes |
-| GET | `/auth/verify-email/:token` | Verify email address | No |
-| POST | `/auth/forgot-password` | Request password reset token | No |
-| POST | `/auth/reset-password` | Reset password using verified token | No |
-| PATCH | `/auth/change-password` | Change user password | Yes |
+| POST | `/auth/register` | Register new user account (returns JWT access token & sets HTTP-only refresh cookie) | No |
+| POST | `/auth/login` | Login with email & password (rate-limited) | No |
+| POST | `/auth/refresh` | Refresh access token with rotation & reuse detection | No |
+| POST | `/auth/logout` | Revoke current refresh token and clear cookie | No |
+| POST | `/auth/logout-all` | Invalidate all active sessions for authenticated user | Yes |
 | GET | `/auth/me` | Fetch authenticated user profile | Yes |
 
-### 2. Finance (`/finance`)
+### 2. User Profile (`/users`)
 | Method | Endpoint | Description | Auth Required |
 |---|---|---|---|
-| GET | `/finance/transactions` | Paginated transaction list with filters | Yes |
-| POST | `/finance/transactions` | Create income/expense entry | Yes |
-| GET | `/finance/transactions/:id` | Get single transaction | Yes |
-| PATCH | `/finance/transactions/:id` | Update transaction | Yes |
-| DELETE | `/finance/transactions/:id` | Delete transaction | Yes |
-| GET | `/finance/categories` | List system & user custom categories | Yes |
-| POST | `/finance/categories` | Create custom category | Yes |
-| GET | `/finance/budgets` | Fetch active budgets | Yes |
-| POST | `/finance/budgets` | Create category-specific budget | Yes |
-| GET | `/finance/savings-goals` | List savings goals & milestones | Yes |
-| POST | `/finance/savings-goals` | Create savings goal | Yes |
-| POST | `/finance/savings-goals/:id/contribute` | Add savings milestone contribution | Yes |
+| GET | `/users/me` | Fetch authenticated user profile | Yes |
+| PUT | `/users/me` | Update authenticated user profile (`fullName`, `profileImage`) | Yes |
+
+### 2. Finance Endpoints (`/transactions`, `/finance/transactions`, `/categories`, `/finance/categories`)
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| GET | `/transactions` | List user transactions with pagination, multi-criteria filters, search & financial summary | Yes |
+| POST | `/transactions` | Create income/expense transaction with category validation | Yes |
+| GET | `/transactions/:id` | Get single transaction by ID (IDOR protected) | Yes |
+| PUT | `/transactions/:id` | Update transaction (IDOR protected) | Yes |
+| DELETE | `/transactions/:id` | Delete transaction (IDOR protected) | Yes |
+| GET | `/categories` | List system & user custom categories | Yes |
+| POST | `/categories` | Create custom category (name unique per user) | Yes |
+| PUT | `/categories/:id` | Update custom category (system categories protected) | Yes |
+| DELETE | `/categories/:id` | Delete custom category (prevents deletion if transactions exist) | Yes |
+| GET | `/budgets` | List user budgets with live spending progress & filtering | Yes |
+| POST | `/budgets` | Create category or overall budget with date calculation | Yes |
+| GET | `/budgets/summary` | Aggregated budget metrics (spending, remaining, alerts) | Yes |
+| GET | `/budgets/:id` | Get single budget with progress (IDOR protected) | Yes |
+| GET | `/budgets/:id/progress`| Get detailed budget progress & qualifying transactions | Yes |
+| PUT | `/budgets/:id` | Update budget amount, threshold, dates, or category | Yes |
+| DELETE | `/budgets/:id` | Delete budget (does NOT delete transactions) | Yes |
+| GET | `/savings-goals` | List user savings goals with dynamic progress & filtering | Yes |
+| POST | `/savings-goals` | Create new savings goal with target amount & optional target date | Yes |
+| GET | `/savings-goals/summary` | Aggregate savings summary (total saved, total target, progress) | Yes |
+| GET | `/savings-goals/:id` | Get single savings goal with live calculated progress | Yes |
+| PUT | `/savings-goals/:id` | Update savings goal details | Yes |
+| PATCH | `/savings-goals/:id/status` | Update goal status (`ACTIVE`, `PAUSED`, `CANCELLED`, `COMPLETED`) | Yes |
+| DELETE | `/savings-goals/:id` | Delete savings goal and cascade delete all its contributions | Yes |
+| POST | `/savings-goals/:id/contributions` | Record a deposit/contribution toward a goal | Yes |
+| GET | `/savings-goals/:id/contributions` | List deposit contributions for a goal | Yes |
+| DELETE | `/savings-goals/:goalId/contributions/:contributionId` | Delete a contribution & dynamically recalculate progress | Yes |
+| GET | `/recurring-transactions` | List all user recurring transaction schedules | Yes |
+| POST | `/recurring-transactions` | Create recurring schedule (`DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`) | Yes |
+| GET | `/recurring-transactions/:id` | Get recurring schedule details | Yes |
+| PUT | `/recurring-transactions/:id` | Update recurring schedule, interval, or dates | Yes |
+| PATCH | `/recurring-transactions/:id/status` | Pause (`isActive: false`) or resume (`isActive: true`) schedule | Yes |
+| DELETE | `/recurring-transactions/:id` | Delete recurring schedule (preserves previously generated transactions) | Yes |
+| GET | `/recurring-transactions/:id/history` | List transactions generated from this recurring rule | Yes |
+| POST | `/recurring-transactions/process-due` | Manually trigger processing of due recurring transactions | Yes |
+
+#### Savings Goal Calculation Formulas:
+- `currentSavedAmount = sum(contributions.amount)` (computed via MongoDB aggregation)
+- `remainingAmount = max(0, targetAmount - currentSavedAmount)`
+- `percentageCompleted = (currentSavedAmount / targetAmount) * 100` (uncapped, allows >100%)
+- `isTargetReached = currentSavedAmount >= targetAmount`
+- `isExceeded = currentSavedAmount > targetAmount`
+- `daysRemaining = ceil((targetDate - now) / 86400000)` (null if no targetDate)
+
+#### Recurring Schedule Rules:
+- Frequencies: `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY` with customizable integer `interval`.
+- Calendar Month-End Handling: Clamps 29th/30th/31st to the last valid day of shorter months (e.g. Feb 28/29) without shifting future anchors.
+- Automated Generator Cron: Runs hourly to generate due `Transaction` records with zero duplication guarantees.
+- Idempotency: Duplicate occurrences on the same date for the same rule are strictly prevented.
+
+#### Budget Calculation Formulas:
+- `remainingAmount = budgetAmount - spentAmount` (allows negative if exceeded)
+- `percentageUsed = (spentAmount / budgetAmount) * 100` (uncapped, precision rounded)
+- `percentageRemaining = max(0, 100 - percentageUsed)`
+- `thresholdReached = percentageUsed >= alertThreshold`
+- `exceededBudget = spentAmount > budgetAmount`
+- `status`:
+  - `EXCEEDED` if `spentAmount > budgetAmount`
+  - `WARNING` if `percentageUsed >= alertThreshold` (and not exceeded)
+  - `EXPIRED` if `endDate < now` (and not exceeded/warning)
+  - `NORMAL` otherwise
+
+#### Budget Query Parameters:
+- `budgetType`: `CATEGORY` or `OVERALL`
+- `period`: `WEEKLY`, `MONTHLY`, or `CUSTOM`
+- `isActive`: `true` or `false`
+- `category`: Category ObjectId
+- `search`: Case-insensitive regex match on budget name
+- `page`: Page number (default: 1)
+- `limit`: Items per page (default: 20, max: 100)
+
+#### Transaction Query Parameters:
+- `page`: Page number (default: 1)
+- `limit`: Items per page (default: 20, max: 100)
+- `type`: `INCOME` or `EXPENSE`
+- `category`: Category ObjectId
+- `paymentMethod`: `CASH`, `UPI`, `DEBIT_CARD`, `CREDIT_CARD`, `BANK_TRANSFER`, `WALLET`, `OTHER`
+- `startDate`: ISO 8601 Date (lower bound)
+- `endDate`: ISO 8601 Date (upper bound)
+- `minAmount`: Minimum amount filter
+- `maxAmount`: Maximum amount filter
+- `search`: Case-insensitive regex match on title, merchant, and description
+- `sortBy`: `transactionDate` or `amount` (default: `transactionDate`)
+- `sortOrder`: `asc` or `desc` (default: `desc`)
 
 ### 3. Nutrition & Diet (`/nutrition`)
 | Method | Endpoint | Description | Auth Required |

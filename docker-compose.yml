@@ -1,0 +1,45 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lifetrack-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5000}:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - API_VERSION=v1
+      - MONGODB_URI=mongodb://mongo:27017/lifetrack
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET:-prod_access_secret_change_me_super_secure_key_12345}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-prod_refresh_secret_change_me_super_secure_key_67890}
+      - COOKIE_SECRET=${COOKIE_SECRET:-prod_cookie_secret_change_me_key_99999}
+      - FRONTEND_URL=http://localhost:5000
+      - SERVE_STATIC=true
+      - SWAGGER_ENABLED=true
+      - RATE_LIMIT_MAX=500
+      - AUTH_RATE_LIMIT_MAX=50
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  mongo:
+    image: mongo:7-jammy
+    container_name: lifetrack-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  mongo-data:
+    driver: local
+

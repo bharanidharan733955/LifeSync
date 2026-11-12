@@ -55,11 +55,13 @@ erDiagram
 
 ### 3.1 Authentication & User Management
 1. **`users`**
-   - Fields: `_id`, `firstName`, `lastName`, `email` (unique index), `password` (bcrypt hash, excluded in queries), `role` (`user` | `admin`), `isActive`, `isEmailVerified`, `avatar`, `phone`, `emailVerificationToken`, `emailVerificationExpires`, `passwordResetToken`, `passwordResetExpires`, `passwordChangedAt`, `lastLoginAt`, `loginCount`, `onboardingCompleted`, `onboardingStep`, `createdAt`, `updatedAt`.
-   - Indexes: `{ email: 1 }` (unique), `{ role: 1 }`, `{ createdAt: -1 }`.
+   - Fields: `_id`, `fullName`, `email` (unique index, normalized lowercase), `password` (bcrypt hash with 12 salt rounds, excluded in queries by default), `profileImage` (optional), `status` (`ACTIVE` | `SUSPENDED`, default: `ACTIVE`), `lastLoginAt`, `createdAt`, `updatedAt`.
+   - Security: Single user type (no role field). Plain-text passwords are never stored. Ownership checks enforced via verified JWT context.
+   - Indexes: `{ email: 1 }` (unique), `{ status: 1 }`, `{ createdAt: -1 }`.
 
 2. **`refreshTokens`**
-   - Fields: `_id`, `user` (ref: User), `tokenHash`, `deviceInfo` (userAgent, ip, platform), `expiresAt`, `isRevoked`, `revokedAt`, `replacedByToken`, `createdAt`.
+   - Fields: `_id`, `user` (ref: User), `tokenHash` (SHA-256 hash of raw token, raw token never stored), `deviceInfo` (userAgent, ip, platform), `expiresAt` (TTL index), `isRevoked`, `revokedAt`, `replacedByToken`, `createdAt`, `updatedAt`.
+   - Security: Refresh-token rotation (every refresh revokes the current token and issues a new pair) with automated reuse detection (detects stolen tokens and invalidates all user sessions).
    - Indexes: `{ tokenHash: 1 }` (unique), `{ user: 1, isRevoked: 1 }`, `{ expiresAt: 1 }` (TTL).
 
 3. **`userPreferences`**
@@ -71,24 +73,42 @@ erDiagram
 
 ### 3.2 Finance Management
 5. **`financeCategories`**
-   - Fields: `_id`, `user` (nullable for system categories), `name`, `type` (`income` | `expense` | `both`), `icon`, `color`, `isSystem`, `isActive`, `parentCategory`, `sortOrder`.
-   - Indexes: `{ user: 1, type: 1 }`, `{ isSystem: 1, type: 1 }`.
+   - Fields: `_id`, `user` (nullable for system categories), `name`, `type` (`INCOME` | `EXPENSE` | `BOTH`), `icon`, `color`, `isSystem`, `isActive`, `description`.
+   - Default Categories (System-seeded):
+     - Expense: Food, Transport, Shopping, Education, Healthcare, Bills, Entertainment, Rent, Subscriptions, Groceries, Travel, Others.
+     - Income: Salary, Freelance, Business, Investment Income, Scholarship, Gift, Other Income.
+   - Indexes: `{ user: 1, type: 1, isActive: 1 }`, `{ isSystem: 1, type: 1, isActive: 1 }`, Unique `{ user: 1, name: 1, type: 1 }` (for non-system categories).
 
 6. **`transactions`**
-   - Fields: `_id`, `user`, `type` (`income` | `expense` | `transfer`), `amount` (Decimal128), `currency`, `category` (ref: FinanceCategory), `description`, `notes`, `date`, `paymentMethod`, `tags`, `attachments`, `isRecurring`, `recurringTransactionId`, `isFoodExpense`, `merchantName`, `location`.
-   - Indexes: `{ user: 1, date: -1 }`, `{ user: 1, type: 1, date: -1 }`, `{ user: 1, category: 1 }`, Text: `{ description: "text", merchantName: "text", notes: "text" }`.
+   - Fields: `_id`, `user` (ref: User), `type` (`INCOME` | `EXPENSE`), `amount` (Decimal128), `currency` (default: `'INR'`), `category` (ref: FinanceCategory), `title`, `description`, `merchant` (or source), `paymentMethod` (`CASH` | `UPI` | `DEBIT_CARD` | `CREDIT_CARD` | `BANK_TRANSFER` | `WALLET` | `OTHER`), `transactionDate`, `recurringTransactionId`, `receiptUrl`, `tags`, `notes`, `isFoodExpense`, `location`.
+   - Precision: `mongoose.Schema.Types.Decimal128` preserved across all transactions, virtual `amountNumber` for UI serialization.
+   - Indexes: `{ user: 1, transactionDate: -1 }`, `{ user: 1, type: 1, transactionDate: -1 }`, `{ user: 1, category: 1, transactionDate: -1 }`, `{ user: 1, paymentMethod: 1 }`, Text: `{ title: "text", merchant: "text", description: "text" }`.
 
 7. **`budgets`**
-   - Fields: `_id`, `user`, `name`, `period` (`weekly` | `monthly` | `yearly`), `periodStartDate`, `periodEndDate`, `totalBudget` (Decimal128), `categoryLimits` (`[{ category, limit (Decimal128), alertThreshold }]`), `isActive`, `alertsEnabled`.
-   - Indexes: `{ user: 1, period: 1, periodStartDate: -1 }`, `{ user: 1, periodStartDate: 1, periodEndDate: 1 }`.
+   - Fields: `_id`, `user` (ref: User), `name`, `budgetType` (`CATEGORY` | `OVERALL`), `category` (ref: FinanceCategory, required for `CATEGORY`, null for `OVERALL`), `amount` (Decimal128), `currency` (default: `'INR'`), `period` (`WEEKLY` | `MONTHLY` | `CUSTOM`), `startDate` (UTC), `endDate` (UTC), `alertThreshold` (1–100, default 80), `isActive`, `notes`, `timestamps`.
+   - Date Semantics:
+     - `WEEKLY`: Monday 00:00:00.000 UTC to Sunday 23:59:59.999 UTC
+     - `MONTHLY`: 1st day of calendar month 00:00:00.000 UTC to last day 23:59:59.999 UTC
+     - `CUSTOM`: User-defined `startDate` to `endDate` (`startDate < endDate`)
+   - Indexes: `{ user: 1, isActive: 1 }`, `{ user: 1, budgetType: 1 }`, `{ user: 1, category: 1, startDate: 1, endDate: 1 }`, `{ user: 1, period: 1, startDate: -1 }`.
+   - Overlap Prevention: Rejects overlapping duplicate active budgets of the same type and category in the same period window.
 
-8. **`savingsGoals`**
-   - Fields: `_id`, `user`, `name`, `description`, `targetAmount` (Decimal128), `currentAmount` (Decimal128), `targetDate`, `category`, `icon`, `color`, `isCompleted`, `contributions` (`[{ amount (Decimal128), note, date }]`).
-   - Indexes: `{ user: 1, isActive: 1 }`, `{ user: 1, targetDate: 1 }`.
+8. **`savingsGoals` & `savingsContributions`**
+   - **`SavingsGoal`**:
+     - Fields: `_id`, `user` (ref User), `name`, `description`, `targetAmount` (Decimal128), `currency`, `targetDate`, `status` (`ACTIVE`|`COMPLETED`|`PAUSED`|`CANCELLED`), `category`, `icon`, `color`, timestamps.
+     - Progress Strategy: Dynamically computed in real-time via MongoDB aggregation pipeline over `SavingsContribution` records. Never stored as an independently editable scalar. Supports uncapped percentages (>100%), remaining amounts, days remaining, and target reached tracking.
+     - Cascade Deletion: Deleting a goal cascades and cleans up all related contribution records.
+     - Indexes: `{ user: 1, status: 1 }`, `{ user: 1, targetDate: 1 }`.
+   - **`SavingsContribution`**:
+     - Fields: `_id`, `user` (ref User), `savingsGoal` (ref SavingsGoal), `amount` (Decimal128 > 0), `currency`, `contributionDate`, `source` (`MANUAL`|`TRANSACTION`), `transactionId` (ref Transaction, optional), `description`, `notes`, timestamps.
+     - Indexes: `{ savingsGoal: 1, contributionDate: -1 }`, `{ user: 1, savingsGoal: 1 }`.
 
 9. **`recurringTransactions`**
-   - Fields: `_id`, `user`, `type`, `amount` (Decimal128), `category`, `description`, `frequency` (`daily`|`weekly`|`biweekly`|`monthly`|`quarterly`|`yearly`), `startDate`, `endDate`, `nextDueDate`, `isActive`.
-   - Indexes: `{ nextDueDate: 1, isActive: 1 }`, `{ user: 1, isActive: 1 }`.
+   - Fields: `_id`, `user` (ref User), `type` (`INCOME`|`EXPENSE`), `title`, `description`, `amount` (Decimal128 > 0), `currency`, `category` (ref FinanceCategory), `paymentMethod`, `frequency` (`DAILY`|`WEEKLY`|`MONTHLY`|`YEARLY`), `interval` (integer >= 1), `startDate`, `nextOccurrence`, `endDate`, `lastGeneratedAt`, `isActive`, `notes`, timestamps.
+   - Recurrence Calculation: Month-end clamping (28th, 29th leap-year, 30th, 31st) via `recurrenceUtils.js`.
+   - Automatic Generator Job: Background cron process (`recurringJob.js`) identifies due schedules (`isActive: true` and `nextOccurrence <= now`), generates `Transaction` records with `recurringTransactionId`, advances `nextOccurrence`, and deactivates rules exceeding `endDate`.
+   - Idempotency Guarantee: Prevents duplicate transactions on the same calendar day for any recurring rule.
+   - Indexes: `{ nextOccurrence: 1, isActive: 1 }`, `{ user: 1, isActive: 1 }`, `{ user: 1, type: 1 }`.
 
 ### 3.3 Nutrition, Sugar & Diet Management
 10. **`nutritionProfiles`**
