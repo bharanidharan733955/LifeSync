@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm --prefix frontend install --no-workspaces && npm --prefix frontend run build",
+    "build": "npm --prefix backend install --no-workspaces && npm --prefix frontend install --no-workspaces && npm --prefix frontend run build",
     "build:all": "npm --prefix backend install --no-workspaces && npm --prefix frontend install --no-workspaces && npm --prefix frontend run build",
     "install:all": "npm --prefix backend install --no-workspaces && npm --prefix frontend install --no-workspaces",
     "start": "npm --prefix backend start",
