@@ -18,33 +18,59 @@ import {
 } from 'recharts';
 import api from '../services/api.js';
 
-const mockFinanceData = [
-  { name: 'Mon', income: 4200, expense: 1200 },
-  { name: 'Tue', income: 3000, expense: 2100 },
-  { name: 'Wed', income: 2000, expense: 980 },
-  { name: 'Thu', income: 2780, expense: 3908 },
-  { name: 'Fri', income: 1890, expense: 4800 },
-  { name: 'Sat', income: 2390, expense: 3800 },
-  { name: 'Sun', income: 3490, expense: 4300 },
-];
-
 export default function Dashboard() {
   const [metrics, setMetrics] = useState({
-    income: 75400,
-    expenses: 32650,
+    income: 0,
+    expenses: 0,
     budgetsActive: 0,
     savingsProgress: 0,
   });
+  const [cashflowData, setCashflowData] = useState([
+    { name: 'Mon', income: 0, expense: 0 },
+    { name: 'Tue', income: 0, expense: 0 },
+    { name: 'Wed', income: 0, expense: 0 },
+    { name: 'Thu', income: 0, expense: 0 },
+    { name: 'Fri', income: 0, expense: 0 },
+    { name: 'Sat', income: 0, expense: 0 },
+    { name: 'Sun', income: 0, expense: 0 },
+  ]);
 
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        const res = await api.get('/analytics/dashboard');
-        if (res.data?.data) {
-          // Sync with live backend analytics endpoint
+        const res = await api.get('/transactions');
+        if (res.data?.summary) {
+          setMetrics({
+            income: res.data.summary.totalIncome || 0,
+            expenses: res.data.summary.totalExpenses || 0,
+            budgetsActive: 0,
+            savingsProgress: 0,
+          });
+        }
+        if (res.data?.data && Array.isArray(res.data.data)) {
+          const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+          const weeklyMap = {
+            Mon: { name: 'Mon', income: 0, expense: 0 },
+            Tue: { name: 'Tue', income: 0, expense: 0 },
+            Wed: { name: 'Wed', income: 0, expense: 0 },
+            Thu: { name: 'Thu', income: 0, expense: 0 },
+            Fri: { name: 'Fri', income: 0, expense: 0 },
+            Sat: { name: 'Sat', income: 0, expense: 0 },
+            Sun: { name: 'Sun', income: 0, expense: 0 },
+          };
+          res.data.data.forEach((tx) => {
+            const d = new Date(tx.transactionDate || tx.createdAt);
+            const dayName = days[d.getDay()];
+            if (weeklyMap[dayName]) {
+              const amt = Number(tx.amount) || 0;
+              if (tx.type === 'INCOME') weeklyMap[dayName].income += amt;
+              else if (tx.type === 'EXPENSE') weeklyMap[dayName].expense += amt;
+            }
+          });
+          setCashflowData(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((k) => weeklyMap[k]));
         }
       } catch (err) {
-        // Fall back gracefully to active local state
+        console.error('Failed to load dashboard metrics:', err);
       }
     };
     fetchDashboard();
@@ -78,9 +104,8 @@ export default function Dashboard() {
             <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
               ₹{(metrics.income - metrics.expenses).toLocaleString('en-IN')}
             </div>
-            <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-emerald-600">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>+14.2% from last month</span>
+            <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-slate-500">
+              <span>Overall status</span>
             </div>
           </div>
         </div>
@@ -160,7 +185,7 @@ export default function Dashboard() {
 
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={mockFinanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={cashflowData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="incomeColor" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.4}/>
