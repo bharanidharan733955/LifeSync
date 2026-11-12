@@ -39,7 +39,7 @@ export const env = {
   EMAIL_FROM: optional('EMAIL_FROM', 'LifeTrack <noreply@lifetrack.app>'),
 
   // Frontend
-  FRONTEND_URL: optional('FRONTEND_URL', 'http://localhost:5173'),
+  FRONTEND_URL: optional('FRONTEND_URL', 'https://life-sync-omega.vercel.app'),
   MOBILE_DEEP_LINK_SCHEME: optional('MOBILE_DEEP_LINK_SCHEME', 'lifetrack'),
 
   // AI
