@@ -6,7 +6,7 @@ services:
     plan: free
     region: oregon
     buildCommand: npm run install:all && npm run build
-    startCommand: npm start --prefix backend
+    startCommand: npm --prefix backend install --no-workspaces && npm --prefix backend start --prefix backend
     healthCheckPath: /health
     autoDeploy: true
     envVars:
